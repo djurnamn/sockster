@@ -43,7 +43,7 @@ USER sockster
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:${SOCKSTER_PORT} || exit 1
+    CMD bash -c 'wget --no-verbose --tries=1 --spider http://localhost:${SOCKSTER_PORT:-4000} > /dev/null 2>&1 & wait $!'
 
 # Use node directly instead of pnpm for better signal handling
 CMD ["./index.js"] 

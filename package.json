@@ -1,6 +1,6 @@
 {
   "name": "sockster",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A lightweight, production-ready WebSocket server that broadcasts all events to connected clients",
   "main": "index.js",
   "bin": {
