@@ -1,60 +1,106 @@
 #!/usr/bin/env node
+"use strict";
 
-require("dotenv").config();
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 
-// Environment variables with defaults
-const PORT = process.env.SOCKSTER_PORT || 4000;
-const ORIGIN_URL = process.env.SOCKSTER_ORIGIN_URL || "http://localhost:3000";
+const DEFAULTS = {
+  port: 4000,
+  origins: ["http://localhost:3000"],
+  echo: true,
+};
 
-// Create HTTP server
-const server = createServer();
+function parseOrigins(value) {
+  if (!value) return DEFAULTS.origins;
+  const origins = value
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  if (origins.includes("*")) return "*";
+  return origins.length > 0 ? origins : DEFAULTS.origins;
+}
 
-// Initialize Socket.IO with CORS configuration
-const io = new Server(server, {
-  cors: {
-    origin: ORIGIN_URL,
-    methods: ["GET", "POST"],
-  },
-  // Add some basic security measures
-  connectionStateRecovery: {
-    // Enable connection state recovery
-    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
-  },
-  pingTimeout: 60000, // Timeout if client doesn't respond to ping
-  pingInterval: 25000, // How often to ping clients
-});
+function createSockster(options = {}) {
+  const origins = options.origins ?? DEFAULTS.origins;
+  const echo = options.echo ?? DEFAULTS.echo;
 
-// Handle socket connections
-io.on("connection", (socket) => {
-  console.log(`Client connected [id=${socket.id}]`);
-
-  // Listen for and broadcast all events
-  socket.onAny((eventName, ...args) => {
-    console.log(`Event received [${eventName}]:`, ...args);
-    io.emit(eventName, ...args);
+  const httpServer = createServer((req, res) => {
+    if (req.url === "/health") {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          status: "ok",
+          uptime: process.uptime(),
+          connections: io.engine.clientsCount,
+        })
+      );
+      return;
+    }
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "Not found" }));
   });
 
-  // Handle disconnections
-  socket.on("disconnect", (reason) => {
-    console.log(`Client disconnected [id=${socket.id}] due to ${reason}`);
+  const io = new Server(httpServer, {
+    cors: {
+      origin: origins,
+      methods: ["GET", "POST"],
+    },
+    pingTimeout: 60000,
+    pingInterval: 25000,
   });
 
-  // Handle errors
-  socket.on("error", (error) => {
-    console.error(`Socket error [id=${socket.id}]:`, error);
+  io.on("connection", (socket) => {
+    console.log(`Client connected [id=${socket.id}]`);
+
+    socket.onAny((eventName, ...args) => {
+      console.log(`Event received [${eventName}]`);
+      if (echo) {
+        io.emit(eventName, ...args);
+      } else {
+        socket.broadcast.emit(eventName, ...args);
+      }
+    });
+
+    socket.on("disconnect", (reason) => {
+      console.log(`Client disconnected [id=${socket.id}] due to ${reason}`);
+    });
+
+    socket.on("error", (error) => {
+      console.error(`Socket error [id=${socket.id}]:`, error);
+    });
   });
-});
 
-// Handle server errors
-server.on("error", (error) => {
-  console.error("Server error:", error);
-});
+  httpServer.on("error", (error) => {
+    console.error("Server error:", error);
+  });
 
-// Start the server
-server.listen(PORT, () => {
-  console.log(`Socket server running on http://localhost:${PORT}`);
-  console.log(`Allowing CORS from origin: ${ORIGIN_URL}`);
-});
+  return { httpServer, io };
+}
 
+if (require.main === module) {
+  require("dotenv").config({ quiet: true });
+
+  const port = Number(process.env.SOCKSTER_PORT) || DEFAULTS.port;
+  const origins = parseOrigins(process.env.SOCKSTER_ORIGIN_URL);
+  const echo = process.env.SOCKSTER_ECHO !== "false";
+
+  const { httpServer, io } = createSockster({ origins, echo });
+
+  httpServer.listen(port, () => {
+    console.log(`sockster listening on port ${port}`);
+    console.log(`Allowed origins: ${origins === "*" ? "*" : origins.join(", ")}`);
+    console.log(`Echo to sender: ${echo}`);
+  });
+
+  const shutdown = (signal) => {
+    console.log(`Received ${signal}, shutting down`);
+    io.close(() => process.exit(0));
+    // Force exit if connections don't close in time
+    setTimeout(() => process.exit(1), 5000).unref();
+  };
+
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
+
+module.exports = { createSockster, parseOrigins };

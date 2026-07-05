@@ -1,14 +1,17 @@
 {
   "name": "sockster",
-  "version": "1.0.1",
-  "description": "A lightweight, production-ready WebSocket server that broadcasts all events to connected clients",
+  "version": "1.1.0",
+  "description": "A small WebSocket server that broadcasts every event to all connected clients",
   "main": "index.js",
   "bin": {
-    "sockster": "./index.js"
+    "sockster": "index.js"
   },
+  "files": [
+    "index.js"
+  ],
   "scripts": {
     "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test"
   },
   "keywords": [
     "websocket",
@@ -22,8 +25,11 @@
   "author": "Björn Djurnamn <bjorn@djurnamn.co>",
   "license": "MIT",
   "dependencies": {
-    "socket.io": "^4.7.5",
-    "dotenv": "^16.0.0"
+    "dotenv": "^17.4.2",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.3"
   },
   "repository": {
     "type": "git",
@@ -34,6 +40,6 @@
   },
   "homepage": "https://github.com/djurnamn/sockster#readme",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }

@@ -1,43 +1,27 @@
-# 🔌 sockster
+# sockster
 
-A lightweight, blazing-fast WebSocket server that broadcasts all events to connected clients. Perfect for real-time applications, chat systems, or any project requiring WebSocket functionality.
+[![npm](https://img.shields.io/npm/v/sockster)](https://www.npmjs.com/package/sockster)
+[![Docker pulls](https://img.shields.io/docker/pulls/djurnamn/sockster)](https://hub.docker.com/r/djurnamn/sockster)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow)](LICENSE)
 
-<div align="center">
+A small WebSocket server that relays every event it receives to all connected clients. Point any number of Socket.IO clients at it and whatever one emits, the rest receive - no rooms to join and no server-side handlers to write.
 
-[![npm version](https://badge.fury.io/js/sockster.svg)](https://badge.fury.io/js/sockster)
-[![Docker Pulls](https://img.shields.io/docker/pulls/djurnamn/sockster.svg)](https://hub.docker.com/r/djurnamn/sockster)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+I built it because I kept needing a realtime backend for prototypes and didn't want to write the same relay server again each time. It's a container you start, not a framework you extend.
 
-</div>
+## Quick start
 
-## ✨ Features
-
-- 🎯 **Simple to use** - Just start the server and it broadcasts all events
-- 🔄 **Universal Broadcasting** - Every event is automatically broadcast to all connected clients
-- 🛡️ **Production Ready** - Built-in CORS, error handling, and health checks
-- 🐳 **Docker Support** - Ready-to-use Docker images with environment variable support
-- 📦 **Easy Deployment** - Deploy anywhere with comprehensive environment variable support
-- 🔌 **Socket.IO Powered** - Built on the reliable Socket.IO framework
-
-## 🚀 Quick Start
-
-### NPM
+### npm
 
 ```bash
-# Install the package
 npm install sockster
-
-# Create an .env file
-echo "SOCKSTER_PORT=4000\nSOCKSTER_ORIGIN_URL=http://localhost:3000" > .env
-
-# Start the server
 npx sockster
 ```
+
+Configuration comes from environment variables, or from an `.env` file in the directory you run it from (see [Configuration](#configuration)).
 
 ### Docker
 
 ```bash
-# Pull and run
 docker run -p 4000:4000 -e SOCKSTER_ORIGIN_URL=http://localhost:3000 djurnamn/sockster
 ```
 
@@ -48,104 +32,68 @@ services:
   sockster:
     image: djurnamn/sockster:latest
     ports:
-      - "${SOCKSTER_PORT:-4000}:4000"
+      - "4000:4000"
     environment:
-      - SOCKSTER_PORT=4000
       - SOCKSTER_ORIGIN_URL=http://localhost:3000
 ```
 
-## 🔌 Client Connection
+## Connecting a client
 
-Connect from your frontend application (JavaScript/TypeScript):
+Use any Socket.IO client. Events pass through as-is, so both sides just agree on event names:
 
 ```javascript
 import { io } from "socket.io-client";
 
 const socket = io("http://localhost:4000");
 
-// Listen for connection
-socket.on("connect", () => {
-  console.log("Connected to sockster! 🎉");
+// Everything any client emits comes back out here
+socket.on("cursor-moved", ({ x, y }) => {
+  drawCursor(x, y);
 });
 
-// Send an event
-socket.emit("my-event", { data: "Hello!" });
-
-// Listen for events
-socket.on("my-event", (data) => {
-  console.log("Received:", data);
-});
+socket.emit("cursor-moved", { x: 128, y: 64 });
 ```
 
-## 🌍 Production Deployment
+By default the sender receives its own events back too, which keeps every client on the same code path. If your clients render their own actions optimistically, set `SOCKSTER_ECHO=false` and events only go to the *other* clients.
 
-### Railway (Recommended)
+## Configuration
 
-1. Install Railway CLI:
-   ```bash
-   npm i -g @railway/cli
-   ```
+| Variable              | Default                 | Description                                                                                   |
+|-----------------------|-------------------------|-----------------------------------------------------------------------------------------------|
+| `SOCKSTER_PORT`       | `4000`                  | Port the server listens on                                                                     |
+| `SOCKSTER_ORIGIN_URL` | `http://localhost:3000` | Allowed CORS origin(s) - a single origin, a comma-separated list, or `*` to allow any origin   |
+| `SOCKSTER_ECHO`       | `true`                  | Whether events are echoed back to the client that sent them; `false` relays to everyone else   |
 
-2. Deploy to Railway:
-   ```bash
-   railway login
-   railway init
-   railway up
-   ```
+## Health endpoint
 
-3. Set environment variables:
-   ```bash
-   railway variables add SOCKSTER_ORIGIN_URL=https://your-frontend-app.com
-   ```
+`GET /health` returns the server state:
 
-4. Get your WebSocket URL:
-   ```bash
-   railway domain
-   ```
+```json
+{ "status": "ok", "uptime": 12.3, "connections": 2 }
+```
 
-5. Update your client configuration:
-   ```javascript
-   const socket = io("wss://your-app-name.railway.app");
-   ```
+The Docker image uses it for its built-in healthcheck, and it works as a probe target on any hosting platform.
 
-## ⚙️ Environment Variables
+## Deploying
 
-| Variable             | Description                           | Default     |
-|---------------------|---------------------------------------|-------------|
-| SOCKSTER_PORT       | Port to run the server on             | 4000        |
-| SOCKSTER_ORIGIN_URL | Allowed CORS origin                   | -           |
+The image runs anywhere containers do - Railway, Fly.io, a VPS with Docker. Set `SOCKSTER_ORIGIN_URL` to your frontend's origin and point clients at the deployed URL; Socket.IO handles the upgrade to `wss` when the page is served over https. The server shuts down cleanly on SIGTERM, so rolling deploys close connections instead of dropping them.
 
-## 🛠️ Development
+## What it isn't
+
+There's no authentication and no persistence - every connected client sees every event, and events emitted while a client is disconnected are gone. That's the design, but it means sockster fits prototypes, local tools, and trusted environments rather than anything carrying sensitive data. It's also single-instance: there's no adapter for fanning out across multiple nodes.
+
+## Development
 
 ```bash
-# Clone the repository
 git clone https://github.com/djurnamn/sockster.git
-
-# Install dependencies
+cd sockster
 pnpm install
-
-# Start the server
+pnpm test
 pnpm start
 ```
 
-## 🤝 Contributing
+Tests use Node's built-in test runner, so `node >= 20` is the only requirement.
 
-Contributions are welcome! Feel free to:
+## License
 
-- 🐛 Report bugs
-- 💡 Suggest features
-- 🔧 Submit pull requests
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-Built with:
-- [Socket.IO](https://socket.io/) - Reliable real-time framework
-- [dotenv](https://github.com/motdotla/dotenv) - Environment variable management
-
-## 🌟 Star Us!
-
-If you find sockster helpful, please consider giving it a star ⭐️ It helps others discover the project!
+MIT - see [LICENSE](LICENSE).
